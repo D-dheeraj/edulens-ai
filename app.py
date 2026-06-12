@@ -419,6 +419,7 @@ with st.sidebar:
     st.divider()
     st.markdown("**📂 Upload Dataset**")
     uploaded = st.file_uploader("Upload student CSV", type=["csv"], label_visibility="collapsed")
+    st.caption("Use the sample dataset from the GitHub repository if needed.")
     st.divider()
 st.markdown("**🤖 AI Assistant**")
 st.caption("Securely configured for insight generation")
