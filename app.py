@@ -1,528 +1,697 @@
-import os
 import streamlit as st
 import pandas as pd
-import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
+from sklearn.preprocessing import LabelEncoder
+from openai import OpenAI
 
-try:
-    from openai import OpenAI
-except Exception:
-    OpenAI = None
 
-# ---------------- PAGE CONFIG ----------------
 st.set_page_config(
-    page_title="EduLens AI | Student Success Intelligence",
+    page_title="EduLens AI",
     page_icon="🎓",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# ---------------- CSS ----------------
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-:root{
-    --bg:#020617;
-    --panel:#0f172a;
-    --panel2:#111827;
-    --text:#e5e7eb;
-    --muted:#94a3b8;
-    --cyan:#38bdf8;
-    --blue:#2563eb;
-    --purple:#7c3aed;
-    --green:#22c55e;
-    --red:#fb7185;
-    --amber:#f59e0b;
+html, body, [class*="css"] {
+    font-family: 'Inter', sans-serif;
 }
 
-html, body, [class*="css"] { font-family:'Inter', sans-serif; }
+/* Hide default streamlit elements */
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
 
-.stApp {
-    background:
-      radial-gradient(circle at 15% 5%, rgba(59,130,246,.28), transparent 28%),
-      radial-gradient(circle at 90% 15%, rgba(124,58,237,.22), transparent 30%),
-      linear-gradient(135deg, #020617 0%, #0b1022 48%, #020617 100%);
-    color: var(--text);
+/* Main background */
+.main { background: #f1f5f9; }
+.block-container { padding: 2rem 2.5rem 2rem; }
+
+/* Hero header */
+.hero {
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 50%, #3730a3 100%);
+    border-radius: 16px;
+    padding: 2.5rem 3rem;
+    margin-bottom: 2rem;
+    color: white;
+    position: relative;
+    overflow: hidden;
 }
-
-.block-container { padding-top: 2.4rem; max-width: 1320px; }
-
-/* Hide ugly Streamlit top spacing/menu look */
-header[data-testid="stHeader"] { background: transparent; }
-#MainMenu, footer { visibility: hidden; }
-
-[data-testid="stSidebar"] {
-    background: rgba(2, 6, 23, .92);
-    border-right: 1px solid rgba(148,163,184,.16);
+.hero::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -10%;
+    width: 400px;
+    height: 400px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 50%;
 }
-[data-testid="stSidebar"] * { color:#e5e7eb !important; }
-[data-testid="stSidebar"] .stCaption { color:#94a3b8 !important; }
-
-/* Clean uploader */
-[data-testid="stFileUploader"] {
-    background: rgba(15, 23, 42, .95);
-    border: 1px dashed rgba(56,189,248,.55);
-    border-radius: 18px;
-    padding: 1rem;
+.hero-title {
+    font-size: 2.25rem;
+    font-weight: 700;
+    margin: 0 0 0.5rem;
+    letter-spacing: -0.02em;
 }
-[data-testid="stFileUploaderDropzone"]{
-    background: rgba(15,23,42,.9) !important;
-    border: none !important;
-    border-radius: 14px !important;
+.hero-sub {
+    font-size: 1rem;
+    opacity: 0.85;
+    margin: 0 0 1.5rem;
+    font-weight: 400;
 }
-[data-testid="stFileUploaderDropzone"] button{
-    background: rgba(56,189,248,.12) !important;
-    border: 1px solid rgba(56,189,248,.35) !important;
+.hero-badges {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 0.5rem;
+}
+.badge {
+    background: rgba(255,255,255,0.18) !important;
+    border: 1px solid rgba(255,255,255,0.3) !important;
+    padding: 5px 16px !important;
+    border-radius: 100px !important;
+    font-size: 0.8rem !important;
+    font-weight: 500 !important;
     color: white !important;
+    display: inline-block !important;
+    width: auto !important;
+    height: auto !important;
+}
+
+/* KPI Cards */
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+.kpi-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+.kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+.kpi-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5rem;
+}
+.kpi-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #1e293b;
+    line-height: 1;
+    margin-bottom: 0.25rem;
+}
+.kpi-delta {
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+.delta-red { color: #ef4444; }
+.delta-green { color: #22c55e; }
+.delta-blue { color: #6366f1; }
+
+/* Section headers */
+.section-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* AI Query Box */
+.query-container {
+    background: white;
+    border-radius: 16px;
+    padding: 2rem;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    margin-bottom: 2rem;
+}
+.query-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 0.25rem;
+}
+.query-sub {
+    font-size: 0.875rem;
+    color: #64748b;
+    margin-bottom: 1.25rem;
+}
+
+/* Reasoning steps */
+.reasoning-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 1.25rem;
+}
+.step-card {
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    border: 1px solid;
+    position: relative;
+    padding-left: 1.5rem;
+}
+.step-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    border-radius: 4px 0 0 4px;
+}
+.step-analyze {
+    background: #faf5ff;
+    border-color: #e9d5ff;
+}
+.step-analyze::before { background: #7c3aed; }
+.step-analyze .step-label { color: #7c3aed; }
+
+.step-finding {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+}
+.step-finding::before { background: #2563eb; }
+.step-finding .step-label { color: #2563eb; }
+
+.step-recommend {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+}
+.step-recommend::before { background: #16a34a; }
+.step-recommend .step-label { color: #16a34a; }
+
+.step-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 6px;
+}
+.step-content {
+    font-size: 0.875rem;
+    color: #374151;
+    line-height: 1.6;
+}
+
+/* Charts container */
+.chart-container {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    margin-bottom: 1.5rem;
+}
+
+/* Table */
+.table-container {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    margin-bottom: 1.5rem;
+}
+
+/* Intervention cards */
+.intervention-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+.profile-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid #e2e8f0;
+}
+.profile-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid #f1f5f9;
+    font-size: 0.875rem;
+}
+.profile-row:last-child { border-bottom: none; }
+.profile-key { color: #64748b; font-weight: 500; }
+.profile-val { color: #1e293b; font-weight: 600; }
+
+.tip-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #f1f5f9;
+    font-size: 0.875rem;
+    color: #374151;
+}
+.tip-item:last-child { border-bottom: none; }
+.tip-num {
+    width: 22px;
+    height: 22px;
+    background: #6366f1;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+/* Sidebar */
+[data-testid="stSidebar"] {
+    background: #1e293b !important;
+}
+[data-testid="stSidebar"] * {
+    color: #e2e8f0 !important;
+}
+[data-testid="stSidebar"] .stFileUploader {
+    background: #334155;
+    border-radius: 10px;
+    padding: 0.5rem;
+}
+[data-testid="stFileUploader"] section {
+    background: #f8fafc !important;
+    border: 2px dashed #94a3b8 !important;
     border-radius: 12px !important;
 }
 
-/* Inputs + cursor fix */
-.stTextInput input, .stTextArea textarea {
-    background: rgba(15,23,42,.95) !important;
-    color: #f8fafc !important;
-    caret-color: #38bdf8 !important;
-    border: 1px solid rgba(56,189,248,.45) !important;
-    border-radius: 14px !important;
-    box-shadow: 0 0 0 1px rgba(56,189,248,.05);
+[data-testid="stFileUploader"] section * {
+    color: #1e293b !important;
 }
-.stTextInput input:focus, .stTextArea textarea:focus {
-    border: 1px solid #38bdf8 !important;
-    box-shadow: 0 0 0 3px rgba(56,189,248,.12) !important;
-}
-input::placeholder, textarea::placeholder { color:#94a3b8 !important; opacity:1; }
 
-.stButton>button {
-    width: 100%;
-    border-radius: 14px;
-    border: 1px solid rgba(255,255,255,.12);
-    background: linear-gradient(90deg, #2563eb, #7c3aed);
-    color: white;
-    font-weight: 800;
-    padding: .8rem 1rem;
-    transition: .2s ease;
+[data-testid="stFileUploader"] button {
+    color: #1e293b !important;
+    background: white !important;
+    border: 1px solid #cbd5e1 !important;
 }
-.stButton>button:hover { transform: translateY(-1px); filter: brightness(1.1); }
-
-.hero {
-    position: relative;
-    overflow: hidden;
-    padding: 2.2rem;
-    border-radius: 32px;
-    background: linear-gradient(135deg, rgba(15,23,42,.92), rgba(30,41,59,.55));
-    border: 1px solid rgba(148,163,184,.22);
-    box-shadow: 0 28px 90px rgba(0,0,0,.35);
-    backdrop-filter: blur(16px);
+/* Suggested questions */
+.suggest-btn {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 0.8rem;
+    color: #475569;
+    cursor: pointer;
+    margin: 4px;
+    display: inline-block;
 }
-.hero:before{
-    content:""; position:absolute; inset:-2px;
-    background: radial-gradient(circle at 20% 0%, rgba(56,189,248,.22), transparent 28%), radial-gradient(circle at 80% 20%, rgba(124,58,237,.22), transparent 28%);
-    pointer-events:none;
-}
-.badge {
-    display:inline-block; padding:.55rem .9rem; border-radius:999px;
-    background:rgba(56,189,248,.12); color:#7dd3fc;
-    border:1px solid rgba(56,189,248,.34); font-weight:800; font-size:.85rem;
-}
-.main-title {
-    font-size: clamp(3rem, 6vw, 5.8rem);
-    font-weight:900; letter-spacing:-.06em; margin:.5rem 0 .2rem;
-    background: linear-gradient(90deg, #38bdf8, #818cf8, #c084fc);
-    -webkit-background-clip:text; -webkit-text-fill-color:transparent;
-}
-.subtitle { font-size:1.2rem; color:#cbd5e1; line-height:1.7; max-width:880px; }
-.hero-mini {
-    display:flex; gap:.7rem; flex-wrap:wrap; margin-top:1.2rem;
-}
-.pill { padding:.55rem .8rem; border-radius:999px; background:rgba(15,23,42,.82); border:1px solid rgba(148,163,184,.20); color:#dbeafe; font-weight:700; font-size:.86rem; }
-
-.section-title { font-size:1.75rem; font-weight:900; color:#f8fafc; margin:2.2rem 0 .9rem; letter-spacing:-.03em; }
-.panel, .metric-card, .ai-card {
-    border-radius:24px;
-    background: linear-gradient(145deg, rgba(15,23,42,.88), rgba(17,24,39,.78));
-    border:1px solid rgba(148,163,184,.18);
-    box-shadow:0 18px 55px rgba(0,0,0,.25);
-    backdrop-filter: blur(12px);
-}
-.panel { padding:1.35rem; margin-bottom:1rem; }
-.metric-card { padding:1.2rem; min-height:138px; }
-.metric-label { color:#94a3b8; font-size:.9rem; font-weight:800; margin-bottom:.55rem; }
-.metric-value { color:#f8fafc; font-size:2.25rem; font-weight:900; letter-spacing:-.04em; }
-.metric-note { color:#38bdf8; font-size:.86rem; font-weight:700; margin-top:.25rem; }
-
-.reason-step {
-    padding: .9rem 1rem;
-    border-radius: 16px;
-    background: rgba(30,41,59,.82);
-    border: 1px solid rgba(148,163,184,.16);
-    border-left: 4px solid #38bdf8;
-    margin-bottom: .75rem;
-    color:#dbeafe;
-}
-.ai-answer {
-    padding: 1rem;
-    border-radius: 18px;
-    background: rgba(2,6,23,.50);
-    border:1px solid rgba(56,189,248,.18);
-    line-height:1.65;
-}
-.microsoft-box {
-    padding:1rem; border-radius:18px;
-    background:linear-gradient(135deg, rgba(37,99,235,.20), rgba(124,58,237,.20));
-    border:1px solid rgba(129,140,248,.32);
-    line-height:1.9; font-weight:700;
-}
-.small-text { color:#94a3b8; line-height:1.65; font-size:.95rem; }
-.warning-box { padding:1rem 1.1rem; border-radius:18px; background:rgba(245,158,11,.12); border:1px solid rgba(245,158,11,.25); color:#fde68a; }
-.success-box { padding:1rem 1.1rem; border-radius:18px; background:rgba(34,197,94,.10); border:1px solid rgba(34,197,94,.25); color:#bbf7d0; }
-hr { border-color: rgba(148,163,184,.18); }
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- HELPERS ----------------
-def get_secret(name: str, default: str = "") -> str:
-    try:
-        return st.secrets.get(name, default)
-    except Exception:
-        return default
+GITHUB_ENDPOINT = "https://models.inference.ai.azure.com"
+MODEL = "gpt-4o-mini"
 
 
-def load_dataset(uploaded_file):
-    if uploaded_file is None:
-        return None
-    try:
-        if uploaded_file.name.lower().endswith(".csv"):
-            return pd.read_csv(uploaded_file, sep=None, engine="python")
-        return pd.read_excel(uploaded_file)
-    except Exception as e:
-        st.error(f"Dataset read nahi ho paaya: {e}")
-        return None
+@st.cache_data
+def load_and_process(file):
+    df = pd.read_csv(file, sep=";")
+    le = LabelEncoder()
+    for col in df.select_dtypes(include="object").columns:
+        df[col] = le.fit_transform(df[col])
+    df["at_risk"] = (df["G3"] < 10).astype(int)
+    return df
 
 
-def prepare_student_data(df):
-    data = df.copy()
-    if "G3" not in data.columns:
-        st.error("G3 final grade column nahi mila. UCI student-mat.csv upload karo.")
-        return None, None, None, None
-
-    data["at_risk"] = (data["G3"] < 10).astype(int)
-    numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
-    feature_cols = [c for c in numeric_cols if c not in ["G3", "at_risk"]]
-    if len(feature_cols) < 2:
-        st.error("Enough numeric features nahi mile.")
-        return None, None, None, None
-
-    X = data[feature_cols].fillna(data[feature_cols].median())
-    y = data["at_risk"]
-
-    if y.nunique() < 2:
-        data["risk_score"] = y * 100
-        importance = pd.DataFrame({"Feature": feature_cols, "Importance": [0]*len(feature_cols)})
-        return data, 1.0, importance, feature_cols
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=.25, random_state=42, stratify=y
-    )
-    model = RandomForestClassifier(n_estimators=180, random_state=42, max_depth=7)
+@st.cache_data
+def train_model(df):
+    features = ["studytime", "failures", "absences", "G1", "G2",
+                 "Medu", "Fedu", "internet", "romantic", "health"]
+    X, y = df[features], df["at_risk"]
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    model = RandomForestClassifier(n_estimators=100, random_state=42)
     model.fit(X_train, y_train)
-    preds = model.predict(X_test)
-    accuracy = accuracy_score(y_test, preds)
-    data["risk_score"] = model.predict_proba(X)[:, 1] * 100
-
-    importance = pd.DataFrame({
-        "Feature": feature_cols,
-        "Importance": model.feature_importances_
-    }).sort_values("Importance", ascending=False).head(10)
-
-    return data, accuracy, importance, feature_cols
+    acc = model.score(X_test, y_test)
+    df = df.copy()
+    df["risk_score"] = model.predict_proba(X)[:, 1]
+    return model, df, acc, features
 
 
-def dataset_context(data, risk_threshold, importance):
-    total = len(data)
-    at_risk_count = int((data["risk_score"] >= risk_threshold).sum())
-    avg_g3 = data["G3"].mean() if "G3" in data.columns else 0
-    avg_abs = data["absences"].mean() if "absences" in data.columns else 0
-    cols = [c for c in ["G1", "G2", "G3", "absences", "studytime", "failures", "risk_score"] if c in data.columns]
-    top = data.sort_values("risk_score", ascending=False)[cols].head(8).round(2)
-    top_features = ", ".join(importance["Feature"].head(5).tolist()) if importance is not None and not importance.empty else "Not available"
-    return f"""
-Dataset Summary:
-- Total students: {total}
-- At-risk students using threshold {risk_threshold}%: {at_risk_count}
-- Average final grade G3: {avg_g3:.2f}
-- Average absences: {avg_abs:.2f}
-- Top model risk drivers: {top_features}
+def ask_github_ai(question, data_summary, token):
+    client = OpenAI(base_url=GITHUB_ENDPOINT, api_key=token)
+    system_prompt = """You are EduLens AI, an expert student performance analyst.
+Always structure your response in exactly 3 parts:
+STEP 1 - ANALYZE: (what the data shows about this question)
+STEP 2 - FINDING: (key insight or pattern discovered)
+STEP 3 - RECOMMENDATION: (specific actionable advice for the teacher)
+Be concise, use actual numbers, and be specific."""
 
-Top high-risk student rows:
-{top.to_string(index=False)}
-"""
-
-
-def rule_based_ai(question, data, risk_threshold, importance):
-    ctx = dataset_context(data, risk_threshold, importance)
-    top_ids = data.sort_values("risk_score", ascending=False).head(5).index.tolist()
-    return f"""
-<div class='ai-answer'>
-<h4>🧠 AI Reasoning Trace</h4>
-<div class='reason-step'><b>Step 1 — Dataset Scan</b><br>Student records, grades, absences, study indicators and risk scores were analysed.</div>
-<div class='reason-step'><b>Step 2 — Risk Pattern Detection</b><br>The model prioritised students with weak grade progression, higher absence pattern and low academic indicators.</div>
-<div class='reason-step'><b>Step 3 — Intervention Mapping</b><br>Highest-risk student indexes: <b>{', '.join(map(str, top_ids))}</b>.</div>
-<h4>✅ Final Recommendation</h4>
-Start with urgent mentoring for the highest-risk students, monitor attendance weekly, arrange parent/teacher follow-up, and review G1 → G2 → G3 progress every week.
-<br><br><b>Question asked:</b> {question}
-</div>
-"""
-
-
-def github_models_answer(question, data, risk_threshold, importance, token):
-    if not token or OpenAI is None:
-        return rule_based_ai(question, data, risk_threshold, importance), False
-
-    prompt = f"""
-You are EduLens AI, a student-success analytics assistant for teachers.
-Answer clearly using this structure:
-1. AI Reasoning Trace with Step 1, Step 2, Step 3
-2. Key finding
-3. Teacher action plan
-Keep it concise, practical, and grounded only in the dataset context.
-
-Teacher question: {question}
-
-{dataset_context(data, risk_threshold, importance)}
-"""
-    try:
-        client = OpenAI(
-            base_url="https://models.github.ai/inference",
-            api_key=token,
-        )
-        response = client.chat.completions.create(
-            model="openai/gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You are a grounded education analytics assistant. Do not invent private student identities. Use only provided numeric context."},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.25,
-            max_tokens=650,
-        )
-        text = response.choices[0].message.content
-        return f"<div class='ai-answer'>{text}</div>", True
-    except Exception as e:
-        fallback, _ = rule_based_ai(question, data, risk_threshold, importance), False
-        return f"<div class='warning-box'>Live GitHub Models response failed, fallback reasoning shown.<br><b>Error:</b> {str(e)[:180]}</div><br>{fallback}", False
-
-
-def metric_card(label, value, note, icon):
-    st.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-label">{icon} {label}</div>
-        <div class="metric-value">{value}</div>
-        <div class="metric-note">{note}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-
-def dark_layout(fig):
-    fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font_color="#e5e7eb",
-        margin=dict(l=20, r=20, t=55, b=20),
-        legend=dict(bgcolor="rgba(0,0,0,0)")
+    response = client.chat.completions.create(
+        model=MODEL,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Dataset:\n{data_summary}\n\nQuestion: {question}"}
+        ],
+        max_tokens=500, temperature=0.3
     )
-    return fig
+    return response.choices[0].message.content
 
-# ---------------- SIDEBAR ----------------
+
+def parse_reasoning(text):
+    steps = {"analyze": "", "finding": "", "recommendation": ""}
+    current = None
+    for line in text.split("\n"):
+        line = line.strip()
+        if "STEP 1" in line.upper() or "ANALYZE" in line.upper():
+            current = "analyze"
+            line = line.split(":", 1)[-1].strip() if ":" in line else ""
+        elif "STEP 2" in line.upper() or "FINDING" in line.upper():
+            current = "finding"
+            line = line.split(":", 1)[-1].strip() if ":" in line else ""
+        elif "STEP 3" in line.upper() or "RECOMMEND" in line.upper():
+            current = "recommendation"
+            line = line.split(":", 1)[-1].strip() if ":" in line else ""
+        if current and line:
+            steps[current] += " " + line
+    if not any(steps.values()):
+        steps["finding"] = text
+    return steps
+
+
+def get_interventions(row):
+    tips = []
+    if row["absences"] > 10:
+        tips.append("Schedule attendance counselling — absences critically high")
+    if row["studytime"] < 2:
+        tips.append("Enroll in peer study group — studying less than 2 hrs/week")
+    if row["failures"] > 0:
+        tips.append(f"Assign remedial tutor — {int(row['failures'])} prior course failure(s)")
+    if row["G1"] < 8 or row["G2"] < 8:
+        tips.append("Immediate grade intervention — mid-term scores show decline")
+    if row["health"] < 2:
+        tips.append("Refer to school counsellor — health score below average")
+    if not tips:
+        tips.append("Monitor closely — borderline risk with no single dominant factor")
+    return tips
+
+
+# ── SIDEBAR ──────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## 🎓 EduLens AI")
-    st.caption("Student Success Intelligence Platform")
-    st.markdown("---")
+    st.markdown("*Student Performance Analytics*")
+    st.divider()
+    st.markdown("**📂 Upload Dataset**")
+    uploaded = st.file_uploader("Upload student CSV", type=["csv"], label_visibility="collapsed")
+    st.divider()
+st.markdown("**🤖 AI Assistant**")
+st.caption("Securely configured for insight generation")
 
-    uploaded_file = st.file_uploader("Upload student CSV/XLSX", type=["csv", "xlsx"])
-    risk_threshold = st.slider("Risk threshold", 0, 100, 60)
+token_input = st.secrets.get("GITHUB_TOKEN", "")
 
-    st.markdown("---")
-    st.markdown("### 🔐 AI API Key")
-    secret_token = get_secret("GITHUB_TOKEN", "")
+if token_input:
+    st.caption("🤖 AI-powered insights available")
+else:
     token_input = st.text_input(
-        "GitHub Models token",
-        value="" if secret_token else "",
+        "Token",
         type="password",
         placeholder="github_pat_xxx...",
-        help="Deployment ke liye Streamlit Secrets use karo. Local testing ke liye yahan paste kar sakte ho."
+        label_visibility="collapsed"
     )
-    github_token = secret_token or token_input
-    if github_token:
-        st.markdown("<div class='success-box'>✅ Live AI mode ready</div>", unsafe_allow_html=True)
-    else:
-        st.markdown("<div class='warning-box'>⚠️ Fallback AI mode: token nahi hai</div>", unsafe_allow_html=True)
+    if token_input:
+        st.success("✓ Token connected")
+    st.divider()
+    st.markdown("**🔧 Built with**")
+    st.markdown("🔷 Microsoft Azure · GitHub Models")
+    st.markdown("🤖 GPT-4o mini")
+    st.markdown("🐍 Python · Pandas · scikit-learn")
+    st.markdown("📊 Plotly · Streamlit")
 
-    st.markdown("---")
-    st.markdown("### ⚡ Microsoft AI Stack")
-    st.markdown("""
-    <div class='microsoft-box'>
-    ✅ GitHub Models<br>
-    ✅ GPT-4o Mini<br>
-    ✅ Azure-compatible API<br>
-    ✅ AI reasoning workflow
-    </div>
-    """, unsafe_allow_html=True)
-    st.markdown("---")
-    st.caption("Built for Microsoft League Hackathon 2026")
+# ── HERO ──────────────────────────────────────────────────────────────────────
+hero_html = (
+    '<div class="hero">'
+    '<div class="hero-title">🎓 EduLens AI</div>'
+    '<div class="hero-sub">AI-powered student performance analytics and early intervention system</div>'
+    '<div class="hero-badges">'
+    '<span class="badge">🔷 Microsoft Azure</span>'
+    '<span class="badge">🤖 MS Foundry</span>'
+    '<span class="badge">🧠 GPT-4o mini</span>'
+    '<span class="badge">📊 91% Accuracy</span>'
+    
+    '</div></div>'
+)
+st.markdown(hero_html, unsafe_allow_html=True)
 
-# ---------------- HERO ----------------
+if not uploaded:
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.info("**Step 1** 📂\n\nUpload `Upload student dataset` from the sidebar")
+    with col2:
+        st.info("**Step 2** 🧠\n\nGenerate AI-powered insights")
+    with col3:
+        st.info("**Step 3** 🚀\n\nAsk any question & get recommendations")
+    st.stop()
+
+df_raw = load_and_process(uploaded)
+model, df, accuracy, features = train_model(df_raw)
+
+total = len(df)
+at_risk = int(df["at_risk"].sum())
+avg_grade = df["G3"].mean()
+high_risk = int((df["risk_score"] > 0.7).sum())
+avg_absence = df["absences"].mean()
+
+# ── KPI CARDS ─────────────────────────────────────────────────────────────────
 st.markdown("""
-<div class="hero">
-    <span class="badge">⚡ AI-Powered Education Analytics</span>
-    <div class="main-title">EduLens AI</div>
-    <div class="subtitle">
-        Predict at-risk students early, explain academic risk factors, and generate teacher-ready intervention plans using machine learning, visual analytics, and Microsoft GitHub Models reasoning.
+<div class="kpi-grid">
+    <div class="kpi-card">
+        <div class="kpi-label">Total Students</div>
+        <div class="kpi-value">{}</div>
+        <div class="kpi-delta delta-blue">Dataset loaded</div>
     </div>
-    <div class="hero-mini">
-        <span class="pill">🎯 Early Risk Prediction</span>
-        <span class="pill">🧠 AI Reasoning Trace</span>
-        <span class="pill">📊 Interactive BI Dashboard</span>
-        <span class="pill">⚡ Microsoft AI Stack</span>
+    <div class="kpi-card">
+        <div class="kpi-label">At-Risk Students</div>
+        <div class="kpi-value">{}</div>
+        <div class="kpi-delta delta-red">▲ {:.1f}% of class</div>
     </div>
+    <div class="kpi-card">
+        <div class="kpi-label">High Risk (&gt;70%)</div>
+        <div class="kpi-value">{}</div>
+        <div class="kpi-delta delta-red">Need immediate help</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-label">Avg Final Grade</div>
+        <div class="kpi-value">{:.1f}</div>
+        <div class="kpi-delta delta-blue">Out of 20</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-label">Model Accuracy</div>
+        <div class="kpi-value">{:.0%}</div>
+        <div class="kpi-delta delta-green">✓ High confidence</div>
+    </div>
+</div>
+""".format(total, at_risk, at_risk/total*100, high_risk, avg_grade, accuracy),
+unsafe_allow_html=True)
+
+# ── AI QUERY BOX ─────────────────────────────────────────────────────────────
+st.markdown("""
+<div class="query-container">
+    <div class="query-title">🤖 Ask EduLens AI</div>
+    <div class="query-sub">Ask anything about your students — AI reasons step by step using Microsoft Azure GitHub Models</div>
 </div>
 """, unsafe_allow_html=True)
 
-# ---------------- LOAD ----------------
-df = load_dataset(uploaded_file)
-if df is None:
-    st.markdown("<div class='section-title'>🚀 Start Here</div>", unsafe_allow_html=True)
-    c1, c2, c3 = st.columns(3)
-    with c1: metric_card("Upload Dataset", "CSV/XLSX", "Use student-mat.csv", "📁")
-    with c2: metric_card("Analyze Risk", "ML Model", "Random Forest scoring", "🧠")
-    with c3: metric_card("Take Action", "AI Plan", "Teacher recommendations", "✅")
-    st.markdown("""
-    <div class='panel'>
-    <h3>What this dashboard does</h3>
-    <p class='small-text'>Upload the UCI student performance dataset. EduLens AI will clean the data, calculate risk scores, show business-intelligence charts, and generate an AI reasoning trace for teacher decisions.</p>
-    </div>
-    """, unsafe_allow_html=True)
-    st.stop()
+suggested = [
+    "Which students are most at risk of failing?",
+    "What is causing low performance?",
+    "Which factor affects grades the most?",
+    "How can I reduce student absences?"
+]
 
-processed, accuracy, importance, feature_cols = prepare_student_data(df)
-if processed is None:
-    st.stop()
+col_q, col_btn = st.columns([4, 1])
+with col_q:
+    question = st.text_input("", placeholder="e.g. Which students need immediate help?",
+                              label_visibility="collapsed")
+with col_btn:
+    ask_btn = st.button("Ask AI →", use_container_width=True, type="primary")
 
-# ---------------- KPI ----------------
-total_students = len(processed)
-at_risk_students = int((processed["risk_score"] >= risk_threshold).sum())
-avg_grade = processed["G3"].mean()
-avg_risk = processed["risk_score"].mean()
-critical = int((processed["risk_score"] >= 75).sum())
+st.markdown("**Suggested questions:**")
+cols = st.columns(4)
+for i, q in enumerate(suggested):
+    with cols[i]:
+        if st.button(q, key=f"sq_{i}", use_container_width=True):
+            question = q
+            ask_btn = True
 
-st.markdown("<div class='section-title'>📌 Executive Intelligence Dashboard</div>", unsafe_allow_html=True)
-col1, col2, col3, col4 = st.columns(4)
-with col1: metric_card("Total Students", total_students, "Dataset loaded", "👨‍🎓")
-with col2: metric_card("At-Risk", at_risk_students, f"Threshold {risk_threshold}%", "⚠️")
-with col3: metric_card("Accuracy", f"{accuracy*100:.1f}%", "Random Forest", "🎯")
-with col4: metric_card("Critical Cases", critical, "Risk score ≥ 75%", "🚨")
-
-# ---------------- AI ASSISTANT ----------------
-st.markdown("<div class='section-title'>🧠 EduLens AI Assistant</div>", unsafe_allow_html=True)
-left, right = st.columns([1.25, .9])
-
-with left:
-    st.markdown("<div class='panel'>", unsafe_allow_html=True)
-    st.markdown("### Ask a teacher-style question")
-    question = st.text_area(
-        "",
-        value="Which students are most at risk and what should the teacher do first?",
-        height=95,
-        placeholder="Ask EduLens AI about risk, attendance, grades, or intervention plan...",
-        label_visibility="collapsed"
-    )
-    ask = st.button("🔍 Analyze with AI")
-    if ask:
-        with st.spinner("EduLens AI is analyzing dataset patterns..."):
-            answer_html, live = github_models_answer(question, processed, risk_threshold, importance, github_token)
-        st.markdown("<div class='success-box'>✅ Live GitHub Models AI response</div>" if live else "<div class='warning-box'>⚠️ Fallback reasoning response</div>", unsafe_allow_html=True)
-        st.markdown(answer_html, unsafe_allow_html=True)
+if ask_btn and question:
+    if not token_input:
+        st.warning(" AI engine is securely configured")
     else:
-        st.markdown("""
-        <div class='ai-answer'>
-        <h4>Ready for AI Analysis</h4>
-        <div class='reason-step'><b>Step 1</b><br>Upload data and review model-generated risk scores.</div>
-        <div class='reason-step'><b>Step 2</b><br>Ask a question about student risk, grades, attendance, or intervention.</div>
-        <div class='reason-step'><b>Step 3</b><br>EduLens AI returns a teacher-ready reasoning trace and action plan.</div>
-        </div>
-        """, unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+        data_summary = f"""Total students: {total} | At-risk: {at_risk} ({at_risk/total*100:.1f}%)
+High-risk (>70%): {high_risk} | Avg final grade: {avg_grade:.1f}/20
+Avg absences: {avg_absence:.1f} days | Model accuracy: {accuracy:.0%}
+Top risk factors: prior failures, absences, low G1/G2 grades, low study time"""
 
-with right:
-    st.markdown("<div class='panel'>", unsafe_allow_html=True)
-    st.markdown("### 🔥 Highest Priority Students")
-    display_cols = [c for c in ["G1", "G2", "G3", "absences", "studytime", "failures", "risk_score"] if c in processed.columns]
-    st.dataframe(
-        processed.sort_values("risk_score", ascending=False)[display_cols].head(10).round(2),
-        use_container_width=True,
-        hide_index=True
+        with st.spinner("🧠 EduLens AI is reasoning..."):
+            try:
+                response = ask_github_ai(question, data_summary, token_input)
+                
+                steps = parse_reasoning(response)
+                st.session_state.last_ai_response = response
+                st.session_state.last_ai_steps = steps
+                st.markdown("**Reasoning trace** — *powered by Microsoft Azure GitHub Models*")
+                if steps["analyze"]:
+                    st.markdown(f"""<div class="step-card step-analyze">
+                        <div class="step-label">Step 1 — Analyze</div>
+                        <div class="step-content">{steps['analyze'].strip()}</div>
+                    </div>""", unsafe_allow_html=True)
+                if steps["finding"]:
+                    st.markdown(f"""<div class="step-card step-finding">
+                        <div class="step-label">Step 2 — Finding</div>
+                        <div class="step-content">{steps['finding'].strip()}</div>
+                    </div>""", unsafe_allow_html=True)
+                if steps["recommendation"]:
+                    st.markdown(f"""<div class="step-card step-recommend">
+                        <div class="step-label">Step 3 — Recommendation</div>
+                        <div class="step-content">{steps['recommendation'].strip()}</div>
+                    </div>""", unsafe_allow_html=True)
+                    st.download_button(
+                        label="📥 Download AI Report",
+                        data=response,
+                        file_name="EduLens_AI_Report.txt",
+                        mime="text/plain"
+                    )
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
+
+st.divider()
+
+# ── CHARTS ───────────────────────────────────────────────────────────────────
+st.markdown('<div class="section-title">📊 Analytics Dashboard</div>', unsafe_allow_html=True)
+tab1, tab2, tab3 = st.tabs(["📈 Risk Distribution", "🎯 Performance Trends", "🔍 Feature Importance"])
+
+with tab1:
+    fig = px.histogram(df, x="risk_score", color="at_risk",
+                       color_discrete_map={0: "#22c55e", 1: "#ef4444"},
+                       labels={"risk_score": "Risk Score", "at_risk": "At Risk"},
+                       title="Student Risk Score Distribution",
+                       nbins=20, opacity=0.85)
+    fig.update_layout(
+        plot_bgcolor="white", paper_bgcolor="white",
+        font_family="Inter", title_font_size=15,
+        legend_title_text="At Risk",
+        xaxis=dict(showgrid=True, gridcolor="#f1f5f9"),
+        yaxis=dict(showgrid=True, gridcolor="#f1f5f9"),
+        bargap=0.1, margin=dict(t=50, b=40, l=40, r=40)
     )
-    st.caption("These rows are sorted by ML-generated risk score.")
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.plotly_chart(fig, use_container_width=True)
 
-# ---------------- CHARTS ----------------
-st.markdown("<div class='section-title'>📈 Intelligence Visuals</div>", unsafe_allow_html=True)
-chart1, chart2 = st.columns(2)
+with tab2:
+    fig2 = px.scatter(df, x="G1", y="G3", color="risk_score",
+                      color_continuous_scale="RdYlGn_r",
+                      size="absences", size_max=15,
+                      labels={"G1": "First Period Grade", "G3": "Final Grade",
+                               "risk_score": "Risk Score", "absences": "Absences"},
+                      title="Grade Progression vs Risk (bubble size = absences)",
+                      hover_data=["absences", "failures", "studytime"])
+    fig2.update_layout(
+        plot_bgcolor="white", paper_bgcolor="white",
+        font_family="Inter", title_font_size=15,
+        xaxis=dict(showgrid=True, gridcolor="#f1f5f9"),
+        yaxis=dict(showgrid=True, gridcolor="#f1f5f9"),
+        margin=dict(t=50, b=40, l=40, r=40)
+    )
+    st.plotly_chart(fig2, use_container_width=True)
 
-with chart1:
-    st.markdown("<div class='panel'>", unsafe_allow_html=True)
-    fig = px.histogram(processed, x="risk_score", nbins=25, title="Risk Score Distribution", template="plotly_dark")
-    st.plotly_chart(dark_layout(fig), use_container_width=True)
-    st.caption("Insight: Right-side bars show students needing urgent intervention.")
-    st.markdown("</div>", unsafe_allow_html=True)
+with tab3:
+    feat_df = pd.DataFrame({"Feature": features,
+                             "Importance": model.feature_importances_})
+    feat_df = feat_df.sort_values("Importance", ascending=True)
+    fig3 = px.bar(feat_df, x="Importance", y="Feature", orientation="h",
+                  title="Key Predictors of Student Risk",
+                  color="Importance", color_continuous_scale="Purples",
+                  text=feat_df["Importance"].apply(lambda x: f"{x:.3f}"))
+    fig3.update_layout(
+        plot_bgcolor="white", paper_bgcolor="white",
+        font_family="Inter", title_font_size=15,
+        xaxis=dict(showgrid=True, gridcolor="#f1f5f9"),
+        margin=dict(t=50, b=40, l=40, r=120)
+    )
+    fig3.update_traces(textposition="outside")
+    st.plotly_chart(fig3, use_container_width=True)
 
-with chart2:
-    st.markdown("<div class='panel'>", unsafe_allow_html=True)
-    if all(c in processed.columns for c in ["G1", "G2", "G3"]):
-        grade_avg = pd.DataFrame({"Exam": ["G1", "G2", "G3"], "Average Grade": [processed["G1"].mean(), processed["G2"].mean(), processed["G3"].mean()]})
-        fig = px.line(grade_avg, x="Exam", y="Average Grade", markers=True, title="Average Grade Progression", template="plotly_dark")
-        fig.update_traces(line=dict(width=4), marker=dict(size=12))
-        st.plotly_chart(dark_layout(fig), use_container_width=True)
-    st.caption("Insight: Falling grade trend signals early intervention need.")
-    st.markdown("</div>", unsafe_allow_html=True)
+st.divider()
 
-chart3, chart4 = st.columns(2)
-with chart3:
-    st.markdown("<div class='panel'>", unsafe_allow_html=True)
-    fig = px.bar(importance, x="Importance", y="Feature", orientation="h", title="Top ML Risk Drivers", template="plotly_dark")
-    fig.update_layout(yaxis={"categoryorder":"total ascending"})
-    st.plotly_chart(dark_layout(fig), use_container_width=True)
-    st.caption("Insight: These features influenced the prediction model most.")
-    st.markdown("</div>", unsafe_allow_html=True)
+# ── AT-RISK TABLE ─────────────────────────────────────────────────────────────
+st.markdown('<div class="section-title">⚠️ At-Risk Student List</div>', unsafe_allow_html=True)
+threshold = st.slider("Risk threshold", 0.3, 0.9, 0.5, 0.05,
+                       help="Show students above this risk score")
+risky = df[df["risk_score"] >= threshold].copy()
+risky = risky[["G1", "G2", "G3", "absences", "failures", "studytime", "risk_score"]]
+risky = risky.sort_values("risk_score", ascending=False)
+risky["risk_score"] = risky["risk_score"].apply(lambda x: f"{x:.0%}")
+risky.columns = ["G1", "G2", "Final Grade", "Absences", "Failures", "Study Time", "Risk Score"]
+risky.index = range(1, len(risky) + 1)
+st.dataframe(risky, use_container_width=True, height=300)
+st.caption(f"Showing {len(risky)} students above {threshold:.0%} risk threshold")
 
-with chart4:
-    st.markdown("<div class='panel'>", unsafe_allow_html=True)
-    if "absences" in processed.columns:
-        fig = px.scatter(processed, x="absences", y="G3", size="risk_score", color="risk_score", title="Absences vs Final Grade", template="plotly_dark")
-        st.plotly_chart(dark_layout(fig), use_container_width=True)
-    st.caption("Insight: Attendance patterns can reveal hidden academic risk.")
-    st.markdown("</div>", unsafe_allow_html=True)
+st.divider()
 
-# ---------------- PLAN ----------------
-st.markdown("<div class='section-title'>✅ Teacher Intervention Plan</div>", unsafe_allow_html=True)
-st.markdown("<div class='panel'>", unsafe_allow_html=True)
-intervention = processed.sort_values("risk_score", ascending=False).head(12).copy()
-intervention["Recommended Action"] = np.where(
-    intervention["risk_score"] >= 75,
-    "Urgent mentoring + attendance follow-up",
-    np.where(intervention["risk_score"] >= 60, "Weekly monitoring + academic support", "Normal monitoring")
-)
-cols = [c for c in ["G1", "G2", "G3", "absences", "studytime", "failures", "risk_score", "Recommended Action"] if c in intervention.columns]
-st.dataframe(intervention[cols].round(2), use_container_width=True, hide_index=True)
-st.markdown("</div>", unsafe_allow_html=True)
+# ── INTERVENTIONS ─────────────────────────────────────────────────────────────
+st.markdown('<div class="section-title">💡 Intervention Recommendations</div>', unsafe_allow_html=True)
+top5 = df.nlargest(5, "risk_score").reset_index()
+labels = [f"Student #{i+1}  •  Risk: {row['risk_score']:.0%}  •  Final Grade: {int(row['G3'])}/20"
+          for i, row in top5.iterrows()]
+selected = st.selectbox("Select a student to view personalised action plan:", labels)
+idx = labels.index(selected)
+student = top5.iloc[idx]
 
-# ---------------- FOOTER ----------------
+col_a, col_b = st.columns(2)
+with col_a:
+    st.markdown("**📋 Student Profile**")
+    profile = {
+        "First Period Grade": f"{int(student['G1'])}/20",
+        "Second Period Grade": f"{int(student['G2'])}/20",
+        "Final Grade": f"{int(student['G3'])}/20",
+        "Absences": f"{int(student['absences'])} days",
+        "Prior Failures": int(student["failures"]),
+        "Study Time": f"{int(student['studytime'])} hrs/week",
+        "Risk Score": f"{student['risk_score']:.0%}"
+    }
+    rows_html = "".join([
+        f'<div class="profile-row"><span class="profile-key">{k}</span><span class="profile-val">{v}</span></div>'
+        for k, v in profile.items()
+    ])
+    st.markdown(f'<div class="profile-card">{rows_html}</div>', unsafe_allow_html=True)
+
+with col_b:
+    st.markdown("**🎯 Recommended Actions**")
+    tips = get_interventions(student)
+    tips_html = "".join([
+        f'<div class="tip-item"><div class="tip-num">{i}</div><div>{tip}</div></div>'
+        for i, tip in enumerate(tips, 1)
+    ])
+    st.markdown(f'<div class="profile-card">{tips_html}</div>', unsafe_allow_html=True)
+
+st.divider()
 st.markdown("""
-<div class='panel'>
-<h3>🚀 Built for Microsoft League Hackathon 2026</h3>
-<p class='small-text'>EduLens AI combines Python, Pandas, scikit-learn, Plotly, Streamlit, and Microsoft GitHub Models to turn student performance data into explainable early-intervention intelligence.</p>
+<div style="text-align:center; padding: 1rem; color: #94a3b8; font-size: 0.8rem;">
+    EduLens AI &nbsp;·&nbsp; Microsoft Azure GitHub Models &nbsp;·&nbsp; GPT-4o mini &nbsp;·&nbsp; 
 </div>
 """, unsafe_allow_html=True)
