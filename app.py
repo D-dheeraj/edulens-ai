@@ -450,7 +450,7 @@ hero_html = (
     '<div class="hero-sub">AI-powered student performance analytics and early intervention system</div>'
     '<div class="hero-badges">'
     '<span class="badge">🔷 Microsoft Azure</span>'
-    '<span class="badge">🤖 MS Foundry</span>'
+    '<span class="badge">🤖 GitHub Models</span>'
     '<span class="badge">🧠 GPT-4o mini</span>'
     '<span class="badge">📊 91% Accuracy</span>'
     
@@ -461,7 +461,7 @@ st.markdown(hero_html, unsafe_allow_html=True)
 if not uploaded:
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.info("**Step 1** 📂\n\nUpload `Upload student dataset` from the sidebar")
+        st.info("**Step 1** 📂\n\nUpload student dataset from the sidebar")
     with col2:
         st.info("**Step 2** 🧠\n\nGenerate AI-powered insights")
     with col3:
